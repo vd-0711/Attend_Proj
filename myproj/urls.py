@@ -7,6 +7,8 @@ from django.contrib import admin
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('mark_attendance/', views.mark_attendance, name='mark_attendance'),
+    path('attendance_success/', views.attendance_success, name='attendance_success'),
     path('', views.process_image, name='process_image'),
 ]
 

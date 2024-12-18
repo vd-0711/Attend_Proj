@@ -7,8 +7,22 @@
     <h1>Processing Result</h1>
     <p>Uploaded Image:</p>
     <img src="{{ file.file.url }}" alt="Uploaded Image" style="width: 30%; height: auto;">
-
-    <p>Processed Image:</p>
-    <img src="{{ file.processed_file.url }}" alt="Processed Image" style="width: 30%; height: auto;">
+    <br>
+    <br>
+    <br>
+    <p>Faces found in image:</p>
+    <br>
+    {% for face_url in file.processed_faces %}
+        <img src="{{ '/media/' }}{{ face_url }}" alt="Processed Image" style="width: auto; height: 200px;">
+        <label for="cars">  Which student is this? :  </label>
+        <select name="students" id="students">
+            <option value="Vidhi">Vidhi</option>
+            <option value="Vibodh">Vibodh</option>
+            <option value="Vinaya">Vinaya</option>
+            <option value="Vivek">Vivek</option>
+        </select>
+        <br>
+        <br>  
+    {% endfor %}
 </body>
 </html>
