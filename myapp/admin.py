@@ -6,7 +6,7 @@ admin.site.register(Course)
 
 @admin.register(UploadedFile)
 class UploadedFileAdmin(admin.ModelAdmin):
-    list_display = ('file', 'processed_file', 'uploaded_at','processed_faces')  
+    list_display = ('uploaded_at', 'file', 'processed_file' ,'processed_faces')  
 
 @admin.register(Students)
 class StudentsAdmin(admin.ModelAdmin):

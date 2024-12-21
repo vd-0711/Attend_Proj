@@ -9,48 +9,117 @@ from ultralytics import YOLO
 from datetime import date, datetime
 from .models import Students, Attendance, Course
 from django.utils.timezone import now
+from django.http import HttpResponse
+from django.db import IntegrityError
+
 
 def mark_attendance(request):
-    students = Students.objects.all()  # Get all students
-    courses = Course.objects.all()  # Get all courses
+    if request.method == "POST":
+        # Process attendance submission
+        date = request.POST.get("date")
+        course_id = request.POST.get("course")
+        course = Course.objects.get(id=course_id)
 
-    if request.method == 'POST':
-        course = request.POST.get('course')  # The selected course from the form
-        attendance_date = request.POST.get('date', date.today())  # Use today's date by default
+        # Iterate through students to update attendance
+        students = Students.objects.all()
         for student in students:
-            # Fetch attendance data for each student
-            student_status = request.POST.get(f'status_{student.id}', 'Absent')  # Default to 'Absent'
-            photo_path = request.FILES.get(f'photo_{student.id}', None)  # Handle file uploads
-            Attendance.objects.create(
-                date=attendance_date,
-                course_id=course,
+            status = request.POST.get(f"status_{student.id}")
+            photo = request.FILES.get(f"photo_{student.id}")
+
+            # Create or update attendance record
+            Attendance.objects.update_or_create(
+                date=date,
+                course=course,
                 student=student,
-                status=student_status,
-                photo=photo_path
+                defaults={"status": status, "photo": photo},
             )
-        return redirect('attendance_success')  # Redirect to a success page or another URL
 
-    return render(request, 'mark_attendance.html', {'students': students, 'courses': courses})
+        # Redirect to success page
+        return render(request, 'attendance_success.html', {"course": course, "date": date})
 
-# def mark_attendance(request):
-#     students = Students.objects.all()  # Get all students
-#     if request.method == 'POST':
-#         course = request.POST.get('course')  # Assume course is passed via form
-#         attendance_date = request.POST.get('date', now().date())  # Use today's date by default
-#         for student in students:
-#             # Fetch attendance data for each student
-#             student_status = request.POST.get(f'status_{student.id}', 'Absent')  # Default to 'Absent'
-#             photo_path = request.POST.get(f'photo_{student.id}', None)  # Optional: File path if photo is uploaded
-#             Attendance.objects.create(
-#                 date=attendance_date,
-#                 course_id=course,
-#                 student=student,
-#                 status=student_status,
-#                 photo=photo_path
-#             )
-#         return redirect('attendance_success')  # Redirect to a success page or another URL
-#     return render(request, 'mark_attendance.html', {'students': students})
+    # For GET requests: Fetch the latest uploaded file
+    latest_upload = UploadedFile.objects.last()
+    classroom_image = latest_upload.file.url if latest_upload else None
+    processed_faces = latest_upload.processed_faces if latest_upload else []
+    print("Classroom Image URL:", classroom_image)
+    print("Processed Faces URLs:", processed_faces)
 
+    # Fetch all courses and students
+    courses = Course.objects.all()
+    students = Students.objects.all()
+
+    # Pass data to the template
+    context = {
+        "classroom_image": classroom_image,
+        "processed_faces": processed_faces,
+        "courses": courses,
+        "students": students,
+    }
+
+    return render(request, 'mark_attendance.html', context)
+
+def result(request):
+    print("111")
+    if request.method == "GET":
+        # Fetch all students and courses for dropdown options
+        print("222")
+        students = Students.objects.all()
+        courses = Course.objects.all()
+        uploaded_file = UploadedFile.objects.last()  # Assuming the most recent uploaded file
+
+        context = {
+            "students": students,
+            "courses": courses,
+            "classroom_image_url": uploaded_file.file.url if uploaded_file else None,
+            "processed_faces": uploaded_file.processed_faces if uploaded_file else [],
+        }
+
+        print("Processed Faces Context:", context["processed_faces"])
+
+        return render(request, 'result.html', context)
+
+    elif request.method == "POST":
+        print("Handling POST request")
+        course_name = request.POST.get("course")  # Get course name from the form
+        print("Selected course:", course_name)
+
+        # Fetch the course object
+        try:
+            course = Course.objects.get(name=course_name)
+        except Course.DoesNotExist:
+            return render(request, "attendance_failed.html", {"error": "Course not found"})
+
+        attendance_date = request.POST.get("date")
+
+        # Loop through processed_faces to save attendance
+        processed_faces_count = len(request.POST) // 2  # Total rows in form
+        for i in range(1, processed_faces_count + 1):
+            student_name = request.POST.get(f"student_{i}")
+            face_image_url = request.POST.get(f"face_image_url_{i}")
+
+            # Skip if student is "Other"
+            if student_name == "Other":
+                continue
+
+            try:
+                student = Students.objects.get(name=student_name)
+            except Students.DoesNotExist:
+                continue  # Skip if student is not found
+
+            # Create attendance entry
+            try:
+                Attendance.objects.create(
+                    date=attendance_date,
+                    course=course,
+                    student=student,
+                    status="Present",
+                    photo=face_image_url,
+                )
+            except IntegrityError:
+                print(f"Attendance already exists for {student_name} on {attendance_date}")
+                continue  # Skip duplicates
+
+        return render(request, "attendance_success.html")
 
 # Function to get class colors
 def getColours(cls_num):
@@ -73,16 +142,16 @@ def process_image(request):
             # OpenCV processing
             file_path = os.path.join(settings.MEDIA_ROOT, uploaded_file.file.name)
             img = cv2.imread(file_path)
-            results = yolo.track(img, stream=True)
+            yolo_results = yolo.track(img, stream=True)
 
             cropped_faces = []  # To store all cropped images
             
-            for result in results:
+            for yolo_each_result in yolo_results:
                 # Get the class names
-                classes_names = result.names
+                classes_names = yolo_each_result.names
 
                 # Iterate over each box
-                for box in result.boxes:
+                for box in yolo_each_result.boxes:
                     # Check if confidence is greater than 40 percent
                     if box.conf[0] > 0.4:
                         # Get the class index
@@ -132,12 +201,12 @@ def process_image(request):
 
                     # Save the cropped face
                     cv2.imwrite(file_path, cropped_face)
-                    processed_face_urls.append(f'processed/faces/{file_name}')
+                    processed_face_urls.append(f'{settings.MEDIA_URL}processed/faces/{file_name}')
 
-                    print(f"File path: {file_path}")
-                    print(f"Relative path: processed/faces/{file_name}")
-                    print("MEDIA_ROOT:", settings.MEDIA_ROOT)
-                    print("MEDIA_URL:", settings.MEDIA_URL)
+                    # print(f"File path: {file_path}")
+                    # print(f"Relative path: processed/faces/{file_name}")
+                    # print("MEDIA_ROOT:", settings.MEDIA_ROOT)
+                    # print("MEDIA_URL:", settings.MEDIA_URL)
 
 
                 uploaded_file.processed_faces = processed_face_urls  # Store the URLs
@@ -152,7 +221,15 @@ def process_image(request):
             #     # Save the processed file path to the model
             #     uploaded_file.processed_file = 'processed/' + uploaded_file.file.name + str(i)
             #     uploaded_file.save()            
-            return render(request, 'result.html', {'file': uploaded_file})
+
+            # sendthis = {
+            #     "file_name" : uploaded_file.file.name,
+            #     "MEDIA_URL" : settings.MEDIA_URL,
+            #     "processed_faces" : processed_face_urls
+            # }   
+
+            #return render(request, 'result.html', sendthis)
+            return redirect('result')
 
     else:
         form = UploadForm()
@@ -161,3 +238,9 @@ def process_image(request):
 
 def attendance_success(request):
     return render(request, 'attendance_success.html')
+
+def direct_attendance(request):
+    return render(request, 'direct_attendance.html')
+
+def attendance_failed(request):
+    return render(request, 'attendance_failed.html')

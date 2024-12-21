@@ -49,3 +49,36 @@ for result in results:
 # show the image
 cv2.imshow('frame', img)
 cv2.waitKey(0)
+
+'''
+
+    <!-- Display processed faces -->
+    {% if processed_faces %}
+        <h2>Detected Faces</h2>
+        <form method="POST" action="{% url 'process_output' %}">
+            {% csrf_token %}
+            <label for="course">Select Course:</label>
+            <select name="course" id="course" required>
+                {% for course in courses %}
+                    <option value="{{ course.id }}">{{ course.name }}</option>
+                {% endfor %}
+            </select>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                {% for face in processed_faces %}
+                    <div style="border: 1px solid #ccc; padding: 10px;">
+                        <img src="{{ face }}" alt="Detected Face" style="width: 100px; height: 100px; object-fit: cover;">
+                        <input type="hidden" name="face_image_url" value="{{ face }}">
+                        <label for="student_{{ forloop.counter }}">Select Student:</label>
+                        <select name="student" id="student_{{ forloop.counter }}" required>
+                            {% for student in students %}
+                                <option value="{{ student.id }}">{{ student.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit">Mark Present</button>
+                    </div>
+                {% endfor %}
+            </div>
+        </form>
+    {% endif %}
+    '''
